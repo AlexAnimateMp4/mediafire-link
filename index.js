@@ -1,50 +1,33 @@
-//thanks to @pepzwee for fixing the code!
-const jsdom = require('jsdom')
-const axios = require('axios')
-const { JSDOM } = jsdom
-
-// some mediafire links are instant downloads
-// and that will potentially crash our JSDOM parsing or make node run out of memory
-// so this function makes sure that the given link returns "text/html" content-type
-async function checkLinkResponseType(link) {
-  const { headers } = await axios.head(link)
-
-  // content type is something other than html
-  if (!headers?.['content-type']?.includes('text/html')) {
-    throw new Error(`Expected "text/html" but received "${headers['content-type']}"`)
-  }
-
-  return
-}
-
-async function getLink(link) {
-  const validLink = new RegExp(/^(http|https):\/\/(?:www\.)?(mediafire)\.com\/[0-9a-z]+(\/.*)/gm)
-
-  if (!link.match(validLink)) throw new Error('Unknown link')
-
-  try {
-    // make sure we are going to be handling html before requesting data
-    await checkLinkResponseType(link)
-
-    const { data } = await axios.get(link)
-
-    const dom = new JSDOM(data)
-    const downloadButton = dom.window.document.querySelector('#downloadButton')
-
-    if (!downloadButton) throw new Error('Could not find download button')
-
-    return downloadButton.href
-  } catch (err) {
-    if (err.response) {
-      if (err.response.status === 404) {
-        throw new Error('The key you provided for file access was invalid.')
-      }
-
-      throw new Error(`Mediafire returned status ${err.response.status}`)
-    }
-
-    throw err
-  }
-}
-
-module.exports = getLink
+module.exports = async (URL, CALLBACK) => await new Promise(async (resolve, reject) => {
+    try {
+        const axios = await require(`axios`);
+        const jsdom = await require(`jsdom`).JSDOM;
+        if (await /^[a-zA-Z0-9]+$/m.test(await URL) == true) return await axios.get(`https://www.mediafire.com/file/${await URL}/file`).then(async response => {
+            const dom = await new jsdom(await response.data);
+            const download_button = await dom.window.document.getElementById(`downloadButton`);
+            if (typeof await download_button == `object` && await download_button != null && typeof await download_button.href == `string` && await String(await download_button.href).length > 0) return await resolve(await download_button.href);
+            else return await reject(await new Error(`Download button is not found!`));
+        }).catch(async error => await reject(await error));
+        else if (await /^(https?:\/\/)?(www\.)?mediafire\.com\/\?[a-zA-Z0-9]+$/m.test(await URL) == true || await /^(https?:\/\/)?(www\.)?mediafire\.com\/(file|view|download)\/[a-zA-Z0-9]+(\/[a-zA-Z0-9_\-\.~%]+)?(\/file)?$/m.test(await URL) == true) return await axios.get(await URL).then(async response => {
+            const dom = await new jsdom(await response.data);
+            const download_button = await dom.window.document.getElementById(`downloadButton`);
+            if (typeof await download_button == `object` && await download_button != null && typeof await download_button.href == `string` && await String(await download_button.href).length > 0) return await resolve(await download_button.href);
+            else return await reject(await new Error(`Download button is not found!`));
+        }).catch(async error => await reject(await error));
+        else return await reject(await new Error(`Defined URL is incorrect!`));
+    } catch (error) {
+        return await reject(await error);
+    };
+}).then(async value => {
+    if (typeof await CALLBACK == `function`) return await CALLBACK({
+        SUCCESS: true,
+        VALUE: await value
+    });
+    else return await value;
+}).catch(async error => {
+    if (typeof await CALLBACK == `function`) return await CALLBACK({
+        SUCCESS: false,
+        ERROR: await error
+    });
+    else throw await error;
+});
